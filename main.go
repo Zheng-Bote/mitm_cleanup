@@ -123,6 +123,7 @@ func main() {
 	}
 
 	ipc.SendEvent("started", fmt.Sprintf("%s (%s) started", appName, version), 0)
+	ipc.SendAudit(fmt.Sprintf("%s (%s) started", appName, version))
 
 	var targetCfg TargetDBConfig
 	targetCfg.Host = os.Getenv("MITM_DB_HOST")
@@ -239,6 +240,7 @@ func main() {
 		totalDeleted += int(res.RowsAffected())
 	}
 
+	ipc.SendAudit(fmt.Sprintf("%s (%s) finished", appName, version))
 	ipc.SendEvent("finished", fmt.Sprintf("Cleanup complete. Removed %d outdated records in total.", totalDeleted), 100)
 	log.Printf("Cleanup complete. Deleted %d rows.", totalDeleted)
 }
