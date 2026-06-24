@@ -186,7 +186,7 @@ func main() {
 	totalDeleted := 0
 
 	// 1. Clean Target Fragments
-	res, err := pool.Exec(ctx, "DELETE FROM target_fragments WHERE status = 'delivered' AND created_at < NOW() - INTERVAL '1 day' * $1", args.TargetFragmentsRetentionDays)
+	res, err := pool.Exec(ctx, "DELETE FROM target_fragments WHERE delivery_status = 'delivered' AND created_at < NOW() - INTERVAL '1 day' * $1", args.TargetFragmentsRetentionDays)
 	if err != nil {
 		log.Printf("Error cleaning target_fragments: %v", err)
 	} else {
