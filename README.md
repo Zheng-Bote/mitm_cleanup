@@ -14,14 +14,26 @@ The cleanup job is meant to be scheduled by the `mitm_scheduler` but can be run 
 
 ### Environment Variables
 
-Like all other workers, it expects database credentials injected via environment variables:
+Like all other workers, it expects database credentials to be injected. The preferred method is via the `MITM_DB_CONFIG_JSON` environment variable, which contains a JSON string with a nested `"db"` object:
+
+```json
+{
+  "db": {
+    "host": "192.168.0.31",
+    "port": 5432,
+    "user": "mitm_user",
+    "password": "...",
+    "database": "mitm"
+  }
+}
+```
+
+If the JSON is not provided, it falls back to parsing direct environment variables:
 - `MITM_DB_HOST`
 - `MITM_DB_PORT`
 - `MITM_DB_USER`
 - `MITM_DB_PASSWORD`
 - `MITM_DB_NAME`
-
-*(Alternatively, via `MITM_DB_CONFIG_JSON`)*
 
 ### Configuration Arguments
 
