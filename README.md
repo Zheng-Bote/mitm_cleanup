@@ -35,6 +35,9 @@ If the JSON is not provided, it falls back to parsing direct environment variabl
 - `MITM_DB_PASSWORD`
 - `MITM_DB_NAME`
 
+In addition, the connection can be secured via:
+- `MITM_DB_SSLMODE` (Optional): Set to `"true"` to enforce an SSL connection (`sslmode=require`).
+
 ### Configuration Arguments
 
 The job accepts a JSON string as its first argument (`os.Args[1]`) to configure retention periods (in days). If omitted or invalid, it falls back to sensible defaults.
