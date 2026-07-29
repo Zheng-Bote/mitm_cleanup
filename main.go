@@ -16,6 +16,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -39,12 +40,12 @@ type TargetDBConfig struct {
 
 // CleanupArgs defines retention policies
 type CleanupArgs struct {
-	TargetFragmentsRetentionDays int `json:"target_fragments_retention_days"`
-	RawIngestionOrphanDays       int `json:"raw_ingestion_orphan_days"`
-	AdminAuditLogsRetentionDays  int `json:"admin_audit_logs_retention_days"`
-	JobAuditLogsRetentionDays    int `json:"job_audit_logs_retention_days"`
-	SystemLogsRetentionDays      int `json:"system_logs_retention_days"`
-	JobStatusEventsRetentionDays int `json:"job_status_events_retention_days"`
+	TargetFragmentsRetentionDays      int `json:"target_fragments_retention_days"`
+	RawIngestionOrphanDays            int `json:"raw_ingestion_orphan_days"`
+	AdminAuditLogsRetentionDays       int `json:"admin_audit_logs_retention_days"`
+	JobAuditLogsRetentionDays         int `json:"job_audit_logs_retention_days"`
+	SystemLogsRetentionDays           int `json:"system_logs_retention_days"`
+	JobStatusEventsRetentionDays      int `json:"job_status_events_retention_days"`
 	TransformationErrorsRetentionDays int `json:"transformation_errors_retention_days"`
 }
 
@@ -108,6 +109,8 @@ func (c *IPCClient) SendAudit(message string) {
 }
 
 func main() {
+	version = strings.Split(version, "-")[0]
+
 	var ipc *IPCClient
 	runIDStr := os.Getenv("RUN_ID")
 	socketPath := os.Getenv("SCHEDULER_SOCKET_PATH")
@@ -128,7 +131,7 @@ func main() {
 	var targetCfg TargetDBConfig
 	configSource := "Environment Variables"
 	jsonConfig := os.Getenv("MITM_DB_CONFIG_JSON")
-	
+
 	if jsonConfig != "" {
 		var fullCfg struct {
 			DB struct {
@@ -256,13 +259,13 @@ func main() {
 	if err == nil {
 		totalDeleted += int(res.RowsAffected())
 	}
-	
+
 	// 5. Clean Job Status Events
 	res, err = pool.Exec(ctx, "DELETE FROM job_status_events WHERE created_at < NOW() - INTERVAL '1 day' * $1", args.JobStatusEventsRetentionDays)
 	if err == nil {
 		totalDeleted += int(res.RowsAffected())
 	}
-	
+
 	// 6. Clean Transformation Errors
 	res, err = pool.Exec(ctx, "DELETE FROM transformation_errors WHERE created_at < NOW() - INTERVAL '1 day' * $1", args.TransformationErrorsRetentionDays)
 	if err == nil {
