@@ -5,6 +5,15 @@ All notable changes to the `mitm_cleanup` component will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.7.0] - 2026-08-29
+
+### Changed/Added
+
+- **Database Performance**: Configured `pgxpool` connection limits (`MaxConns=20`, `MaxConnIdleTime=5m`, `MaxConnLifetime=1h`).
+- **Reliability**: Implemented `signal.NotifyContext` for graceful shutdown handling on `SIGTERM` / `SIGINT`.
+- **Observability**: Overhauled error handling for deletion queries. Errors are now consistently logged and result in a `failed` IPC event, preventing silent failures.
+- **Testing**: Added `main_test.go` to ensure CLI parameters are parsed and defaulted correctly.
+
 ## [v0.6.0] - 2026-07-29
 
 ### Changed

@@ -15,8 +15,10 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -25,7 +27,7 @@ import (
 var (
 	appName        = "MitM Cleanup Job"
 	appDescription = "Maintains database health by pruning old records."
-	version        = "1.0.0"
+	version        = "0.7.0"
 )
 
 // TargetDBConfig defines parameters for the MitM target database
@@ -203,10 +205,21 @@ func main() {
 			targetCfg.User, targetCfg.Password, targetCfg.Host, targetCfg.Port, targetCfg.Database, sslMode)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	pool, err := pgxpool.New(ctx, mitmDSN)
+	config_pool, err := pgxpool.ParseConfig(mitmDSN)
+	if err == nil {
+		config_pool.MaxConns = 20
+		config_pool.MaxConnIdleTime = 5 * time.Minute
+		config_pool.MaxConnLifetime = 1 * time.Hour
+	}
+	var pool *pgxpool.Pool
+	if err == nil {
+		pool, err = pgxpool.NewWithConfig(ctx, config_pool)
+	}
 	if err != nil {
 		ipc.SendEvent("failed", fmt.Sprintf("Failed to connect to MitM database: %v", err), 0)
 		log.Fatalf("Failed to connect: %v", err)
@@ -216,11 +229,13 @@ func main() {
 	ipc.SendEvent("processing", "Connected to MitM database. Starting cleanup...", 10)
 
 	totalDeleted := 0
+	errorsOccurred := false
 
 	// 1. Clean Target Fragments
 	res, err := pool.Exec(ctx, "DELETE FROM target_fragments WHERE delivery_status = 'delivered' AND created_at < NOW() - INTERVAL '1 day' * $1", args.TargetFragmentsRetentionDays)
 	if err != nil {
 		log.Printf("Error cleaning target_fragments: %v", err)
+		errorsOccurred = true
 	} else {
 		count := res.RowsAffected()
 		totalDeleted += int(count)
@@ -234,6 +249,7 @@ func main() {
 	res, err = pool.Exec(ctx, "DELETE FROM raw_ingestion WHERE status IN ('pending', 'delivered') AND created_at < NOW() - INTERVAL '1 day' * $1", args.RawIngestionOrphanDays)
 	if err != nil {
 		log.Printf("Error cleaning raw_ingestion: %v", err)
+		errorsOccurred = true
 	} else {
 		count := res.RowsAffected()
 		totalDeleted += int(count)
@@ -244,11 +260,17 @@ func main() {
 
 	// 3. Clean Audit Logs
 	res, err = pool.Exec(ctx, "DELETE FROM job_audit_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1", args.JobAuditLogsRetentionDays)
-	if err == nil {
+	if err != nil {
+		log.Printf("Error cleaning job_audit_logs: %v", err)
+		errorsOccurred = true
+	} else {
 		totalDeleted += int(res.RowsAffected())
 	}
 	res, err = pool.Exec(ctx, "DELETE FROM admin_audit_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1", args.AdminAuditLogsRetentionDays)
-	if err == nil {
+	if err != nil {
+		log.Printf("Error cleaning admin_audit_logs: %v", err)
+		errorsOccurred = true
+	} else {
 		totalDeleted += int(res.RowsAffected())
 	}
 
@@ -256,23 +278,37 @@ func main() {
 
 	// 4. Clean System Logs
 	res, err = pool.Exec(ctx, "DELETE FROM system_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1", args.SystemLogsRetentionDays)
-	if err == nil {
+	if err != nil {
+		log.Printf("Error cleaning system_logs: %v", err)
+		errorsOccurred = true
+	} else {
 		totalDeleted += int(res.RowsAffected())
 	}
 
 	// 5. Clean Job Status Events
 	res, err = pool.Exec(ctx, "DELETE FROM job_status_events WHERE created_at < NOW() - INTERVAL '1 day' * $1", args.JobStatusEventsRetentionDays)
-	if err == nil {
+	if err != nil {
+		log.Printf("Error cleaning job_status_events: %v", err)
+		errorsOccurred = true
+	} else {
 		totalDeleted += int(res.RowsAffected())
 	}
 
 	// 6. Clean Transformation Errors
 	res, err = pool.Exec(ctx, "DELETE FROM transformation_errors WHERE created_at < NOW() - INTERVAL '1 day' * $1", args.TransformationErrorsRetentionDays)
-	if err == nil {
+	if err != nil {
+		log.Printf("Error cleaning transformation_errors: %v", err)
+		errorsOccurred = true
+	} else {
 		totalDeleted += int(res.RowsAffected())
 	}
 
 	ipc.SendAudit(fmt.Sprintf("%s (%s) finished", appName, version))
-	ipc.SendEvent("finished", fmt.Sprintf("Cleanup complete. Removed %d outdated records in total.", totalDeleted), 100)
-	log.Printf("Cleanup complete. Deleted %d rows.", totalDeleted)
+	if errorsOccurred {
+		ipc.SendEvent("failed", fmt.Sprintf("Cleanup partially failed. Removed %d outdated records, but some errors occurred.", totalDeleted), 100)
+		log.Printf("Cleanup complete with errors. Deleted %d rows.", totalDeleted)
+	} else {
+		ipc.SendEvent("finished", fmt.Sprintf("Cleanup complete. Removed %d outdated records in total.", totalDeleted), 100)
+		log.Printf("Cleanup complete. Deleted %d rows.", totalDeleted)
+	}
 }
