@@ -277,14 +277,18 @@ func main() {
 		log.Printf("Error cleaning job_audit_logs: %v", err)
 		errorsOccurred = true
 	} else {
-		totalDeleted += int(res.RowsAffected())
+		count := res.RowsAffected()
+		totalDeleted += int(count)
+		ipc.SendAudit(fmt.Sprintf("Deleted %d job audit logs older than %d days.", count, args.JobAuditLogsRetentionDays))
 	}
 	res, err = pool.Exec(ctx, "DELETE FROM admin_audit_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1", args.AdminAuditLogsRetentionDays)
 	if err != nil {
 		log.Printf("Error cleaning admin_audit_logs: %v", err)
 		errorsOccurred = true
 	} else {
-		totalDeleted += int(res.RowsAffected())
+		count := res.RowsAffected()
+		totalDeleted += int(count)
+		ipc.SendAudit(fmt.Sprintf("Deleted %d admin audit logs older than %d days.", count, args.AdminAuditLogsRetentionDays))
 	}
 
 	ipc.SendEvent("processing", "Cleaned audit logs.", 60)
@@ -295,7 +299,9 @@ func main() {
 		log.Printf("Error cleaning system_logs: %v", err)
 		errorsOccurred = true
 	} else {
-		totalDeleted += int(res.RowsAffected())
+		count := res.RowsAffected()
+		totalDeleted += int(count)
+		ipc.SendAudit(fmt.Sprintf("Deleted %d system logs older than %d days.", count, args.SystemLogsRetentionDays))
 	}
 
 	// 5. Clean Job Status Events
@@ -304,7 +310,9 @@ func main() {
 		log.Printf("Error cleaning job_status_events: %v", err)
 		errorsOccurred = true
 	} else {
-		totalDeleted += int(res.RowsAffected())
+		count := res.RowsAffected()
+		totalDeleted += int(count)
+		ipc.SendAudit(fmt.Sprintf("Deleted %d job status events older than %d days.", count, args.JobStatusEventsRetentionDays))
 	}
 
 	// 6. Clean Transformation Errors
@@ -313,7 +321,9 @@ func main() {
 		log.Printf("Error cleaning transformation_errors: %v", err)
 		errorsOccurred = true
 	} else {
-		totalDeleted += int(res.RowsAffected())
+		count := res.RowsAffected()
+		totalDeleted += int(count)
+		ipc.SendAudit(fmt.Sprintf("Deleted %d transformation errors older than %d days.", count, args.TransformationErrorsRetentionDays))
 	}
 
 	ipc.SendAudit(fmt.Sprintf("%s (%s) finished", appName, version))
