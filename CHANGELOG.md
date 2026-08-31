@@ -5,6 +5,16 @@ All notable changes to the `mitm_cleanup` component will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.8.0] - 2026-08-31
+
+### Added
+
+- **IPC Socket as Credential Broker**: The cleanup job now fetches database credentials and the master key at runtime from the Scheduler via a Unix Domain Socket request (`get_credentials` with `RUN_ID` and `SCHEDULER_SOCKET_PATH`), instead of holding them locally.
+
+### Changed
+
+- **IPC Audit Logging for Cleanups**: Added missing `ipc.SendAudit` calls for every cleaned table (`job_audit_logs`, `admin_audit_logs`, `system_logs`, `job_status_events`, `transformation_errors`), reporting the deleted row count and applied retention period.
+
 ## [v0.7.0] - 2026-08-29
 
 ### Changed/Added
