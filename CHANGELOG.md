@@ -5,6 +5,13 @@ All notable changes to the `mitm_cleanup` component will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.8.3] - 2026-09-01
+
+### Fixed
+
+- **SQL Schema Mismatch**: Fixed an issue where the cleanup queries for `job_audit_logs`, `admin_audit_logs`, `system_logs`, and `job_status_events` incorrectly referenced `created_at` instead of `ts`. (Fixes #2)
+- **Incomplete Audit Logs**: By fixing the SQL schema mismatch, the cleanup job now successfully completes all deletions and properly sends the `ipc.SendAudit` messages for all tables to the scheduler. (Fixes #1)
+
 ## [v0.8.2] - 2026-09-01
 
 ### Fixed

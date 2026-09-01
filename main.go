@@ -28,7 +28,7 @@ import (
 var (
 	appName        = "MitM Cleanup Job"
 	appDescription = "Maintains database health by pruning old records."
-	version        = "0.8.2"
+	version        = "0.8.3"
 )
 
 // TargetDBConfig defines parameters for the MitM target database
@@ -285,7 +285,7 @@ func main() {
 	ipc.SendEvent("processing", "Cleaned raw fragments.", 50)
 
 	// 3. Clean Audit Logs
-	res, err = pool.Exec(ctx, "DELETE FROM job_audit_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1", args.JobAuditLogsRetentionDays)
+	res, err = pool.Exec(ctx, "DELETE FROM job_audit_logs WHERE ts < NOW() - INTERVAL '1 day' * $1", args.JobAuditLogsRetentionDays)
 	if err != nil {
 		log.Printf("Error cleaning job_audit_logs: %v", err)
 		errorsOccurred = true
@@ -294,7 +294,7 @@ func main() {
 		totalDeleted += int(count)
 		ipc.SendAudit(fmt.Sprintf("Deleted %d job audit logs older than %d days.", count, args.JobAuditLogsRetentionDays))
 	}
-	res, err = pool.Exec(ctx, "DELETE FROM admin_audit_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1", args.AdminAuditLogsRetentionDays)
+	res, err = pool.Exec(ctx, "DELETE FROM admin_audit_logs WHERE ts < NOW() - INTERVAL '1 day' * $1", args.AdminAuditLogsRetentionDays)
 	if err != nil {
 		log.Printf("Error cleaning admin_audit_logs: %v", err)
 		errorsOccurred = true
@@ -307,7 +307,7 @@ func main() {
 	ipc.SendEvent("processing", "Cleaned audit logs.", 60)
 
 	// 4. Clean System Logs
-	res, err = pool.Exec(ctx, "DELETE FROM system_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1", args.SystemLogsRetentionDays)
+	res, err = pool.Exec(ctx, "DELETE FROM system_logs WHERE ts < NOW() - INTERVAL '1 day' * $1", args.SystemLogsRetentionDays)
 	if err != nil {
 		log.Printf("Error cleaning system_logs: %v", err)
 		errorsOccurred = true
@@ -318,7 +318,7 @@ func main() {
 	}
 
 	// 5. Clean Job Status Events
-	res, err = pool.Exec(ctx, "DELETE FROM job_status_events WHERE created_at < NOW() - INTERVAL '1 day' * $1", args.JobStatusEventsRetentionDays)
+	res, err = pool.Exec(ctx, "DELETE FROM job_status_events WHERE ts < NOW() - INTERVAL '1 day' * $1", args.JobStatusEventsRetentionDays)
 	if err != nil {
 		log.Printf("Error cleaning job_status_events: %v", err)
 		errorsOccurred = true
