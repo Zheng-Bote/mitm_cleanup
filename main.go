@@ -50,6 +50,7 @@ type CleanupArgs struct {
 	SystemLogsRetentionDays           int `json:"system_logs_retention_days"`
 	JobStatusEventsRetentionDays      int `json:"job_status_events_retention_days"`
 	TransformationErrorsRetentionDays int `json:"transformation_errors_retention_days"`
+	TimeoutMinutes                    int `json:"timeout_minutes"`
 }
 
 // StatusEvent is sent to the scheduler Unix socket
@@ -109,6 +110,39 @@ func (c *IPCClient) SendAudit(message string) {
 	}
 	data, _ := json.Marshal(event)
 	_, _ = conn.Write(append(data, '\n'))
+}
+
+func deleteInBatches(ctx context.Context, pool *pgxpool.Pool, tableName string, condition string, arg interface{}) (int, error) {
+	totalDeleted := 0
+	batchSize := 10000
+
+	query := fmt.Sprintf(`
+		DELETE FROM %s
+		WHERE ctid IN (
+			SELECT ctid FROM %s
+			WHERE %s
+			LIMIT %d
+		)
+	`, tableName, tableName, condition, batchSize)
+
+	for {
+		res, err := pool.Exec(ctx, query, arg)
+		if err != nil {
+			return totalDeleted, err
+		}
+		count := res.RowsAffected()
+		totalDeleted += int(count)
+		if count == 0 {
+			break
+		}
+	}
+
+	_, err := pool.Exec(ctx, fmt.Sprintf("VACUUM ANALYZE %s", tableName))
+	if err != nil {
+		log.Printf("Warning: VACUUM ANALYZE failed on %s: %v", tableName, err)
+	}
+
+	return totalDeleted, nil
 }
 
 func main() {
@@ -204,6 +238,7 @@ func main() {
 		SystemLogsRetentionDays:           30,
 		JobStatusEventsRetentionDays:      14,
 		TransformationErrorsRetentionDays: 30,
+		TimeoutMinutes:                    60,
 	}
 
 	if len(os.Args) >= 2 {
@@ -233,12 +268,16 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	timeoutDur := time.Duration(args.TimeoutMinutes) * time.Minute
+	if timeoutDur <= 0 {
+		timeoutDur = 60 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeoutDur)
 	defer cancel()
 
 	config_pool, err := pgxpool.ParseConfig(mitmDSN)
 	if err == nil {
-		config_pool.MaxConns = 20
+		config_pool.MaxConns = 3
 		config_pool.MaxConnIdleTime = 5 * time.Minute
 		config_pool.MaxConnLifetime = 1 * time.Hour
 	}
@@ -258,13 +297,13 @@ func main() {
 	errorsOccurred := false
 
 	// 1. Clean Target Fragments
-	res, err := pool.Exec(ctx, "DELETE FROM target_fragments WHERE delivery_status = 'delivered' AND created_at < NOW() - INTERVAL '1 day' * $1", args.TargetFragmentsRetentionDays)
+	count, err := deleteInBatches(ctx, pool, "target_fragments", "delivery_status = 'delivered' AND created_at < NOW() - INTERVAL '1 day' * $1", args.TargetFragmentsRetentionDays)
 	if err != nil {
 		log.Printf("Error cleaning target_fragments: %v", err)
 		errorsOccurred = true
 	} else {
-		count := res.RowsAffected()
-		totalDeleted += int(count)
+		totalDeleted += count
+
 		ipc.SendAudit(fmt.Sprintf("Deleted %d delivered target fragments older than %d days.", count, args.TargetFragmentsRetentionDays))
 	}
 
@@ -272,70 +311,70 @@ func main() {
 
 	// 2. Clean Orphaned Raw Ingestion
 	// E.g., status pending and no update in 'x' days
-	res, err = pool.Exec(ctx, "DELETE FROM raw_ingestion WHERE status IN ('pending', 'delivered') AND created_at < NOW() - INTERVAL '1 day' * $1", args.RawIngestionOrphanDays)
+	count, err = deleteInBatches(ctx, pool, "raw_ingestion", "status IN ('pending', 'delivered') AND created_at < NOW() - INTERVAL '1 day' * $1", args.RawIngestionOrphanDays)
 	if err != nil {
 		log.Printf("Error cleaning raw_ingestion: %v", err)
 		errorsOccurred = true
 	} else {
-		count := res.RowsAffected()
-		totalDeleted += int(count)
+		totalDeleted += count
+
 		ipc.SendAudit(fmt.Sprintf("Deleted %d raw ingestion fragments older than %d days.", count, args.RawIngestionOrphanDays))
 	}
 
 	ipc.SendEvent("processing", "Cleaned raw fragments.", 50)
 
 	// 3. Clean Audit Logs
-	res, err = pool.Exec(ctx, "DELETE FROM job_audit_logs WHERE ts < NOW() - INTERVAL '1 day' * $1", args.JobAuditLogsRetentionDays)
+	count, err = deleteInBatches(ctx, pool, "job_audit_logs", "ts < NOW() - INTERVAL '1 day' * $1", args.JobAuditLogsRetentionDays)
 	if err != nil {
 		log.Printf("Error cleaning job_audit_logs: %v", err)
 		errorsOccurred = true
 	} else {
-		count := res.RowsAffected()
-		totalDeleted += int(count)
+		totalDeleted += count
+
 		ipc.SendAudit(fmt.Sprintf("Deleted %d job audit logs older than %d days.", count, args.JobAuditLogsRetentionDays))
 	}
-	res, err = pool.Exec(ctx, "DELETE FROM admin_audit_logs WHERE ts < NOW() - INTERVAL '1 day' * $1", args.AdminAuditLogsRetentionDays)
+	count, err = deleteInBatches(ctx, pool, "admin_audit_logs", "ts < NOW() - INTERVAL '1 day' * $1", args.AdminAuditLogsRetentionDays)
 	if err != nil {
 		log.Printf("Error cleaning admin_audit_logs: %v", err)
 		errorsOccurred = true
 	} else {
-		count := res.RowsAffected()
-		totalDeleted += int(count)
+		totalDeleted += count
+
 		ipc.SendAudit(fmt.Sprintf("Deleted %d admin audit logs older than %d days.", count, args.AdminAuditLogsRetentionDays))
 	}
 
 	ipc.SendEvent("processing", "Cleaned audit logs.", 60)
 
 	// 4. Clean System Logs
-	res, err = pool.Exec(ctx, "DELETE FROM system_logs WHERE ts < NOW() - INTERVAL '1 day' * $1", args.SystemLogsRetentionDays)
+	count, err = deleteInBatches(ctx, pool, "system_logs", "ts < NOW() - INTERVAL '1 day' * $1", args.SystemLogsRetentionDays)
 	if err != nil {
 		log.Printf("Error cleaning system_logs: %v", err)
 		errorsOccurred = true
 	} else {
-		count := res.RowsAffected()
-		totalDeleted += int(count)
+		totalDeleted += count
+
 		ipc.SendAudit(fmt.Sprintf("Deleted %d system logs older than %d days.", count, args.SystemLogsRetentionDays))
 	}
 
 	// 5. Clean Job Status Events
-	res, err = pool.Exec(ctx, "DELETE FROM job_status_events WHERE ts < NOW() - INTERVAL '1 day' * $1", args.JobStatusEventsRetentionDays)
+	count, err = deleteInBatches(ctx, pool, "job_status_events", "ts < NOW() - INTERVAL '1 day' * $1", args.JobStatusEventsRetentionDays)
 	if err != nil {
 		log.Printf("Error cleaning job_status_events: %v", err)
 		errorsOccurred = true
 	} else {
-		count := res.RowsAffected()
-		totalDeleted += int(count)
+		totalDeleted += count
+
 		ipc.SendAudit(fmt.Sprintf("Deleted %d job status events older than %d days.", count, args.JobStatusEventsRetentionDays))
 	}
 
 	// 6. Clean Transformation Errors
-	res, err = pool.Exec(ctx, "DELETE FROM transformation_errors WHERE created_at < NOW() - INTERVAL '1 day' * $1", args.TransformationErrorsRetentionDays)
+	count, err = deleteInBatches(ctx, pool, "transformation_errors", "created_at < NOW() - INTERVAL '1 day' * $1", args.TransformationErrorsRetentionDays)
 	if err != nil {
 		log.Printf("Error cleaning transformation_errors: %v", err)
 		errorsOccurred = true
 	} else {
-		count := res.RowsAffected()
-		totalDeleted += int(count)
+		totalDeleted += count
+
 		ipc.SendAudit(fmt.Sprintf("Deleted %d transformation errors older than %d days.", count, args.TransformationErrorsRetentionDays))
 	}
 
@@ -355,12 +394,12 @@ func fetchCredentialsFromScheduler() (string, string, error) {
 	if runIDStr == "" || socketPath == "" {
 		return "", "", fmt.Errorf("not running under scheduler")
 	}
-	
+
 	runID, err := strconv.Atoi(runIDStr)
 	if err != nil {
 		return "", "", err
 	}
-	
+
 	conn, err := net.Dial("unix", socketPath)
 	if err != nil {
 		return "", "", err

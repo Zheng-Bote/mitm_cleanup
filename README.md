@@ -50,9 +50,12 @@ The job accepts a JSON string as its first argument (`os.Args[1]`) to configure 
   "job_audit_logs_retention_days": 30,
   "system_logs_retention_days": 30,
   "job_status_events_retention_days": 14,
-  "transformation_errors_retention_days": 30
+  "transformation_errors_retention_days": 30,
+  "timeout_minutes": 60
 }
 ```
+
+- **`timeout_minutes`**: Configures the context execution timeout for the cleanup job (default is 60 minutes). This is useful to prevent long-running batched cleanups from being killed prematurely.
 
 ## Build
 
