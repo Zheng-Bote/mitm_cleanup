@@ -5,6 +5,11 @@ All notable changes to the `mitm_cleanup` component will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.9.0] - 2026-09-09
+
+### Changed
+- **Performance:** Optimized database cleanup job (Issue #4). `DELETE` operations are now batched (10k limit), connection pool reduced to 3, timeout made configurable (`timeout_minutes`), and explicit `VACUUM ANALYZE` commands added for reclaimed space.
+
 ## [v0.8.3] - 2026-09-01
 
 ### Fixed

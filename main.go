@@ -28,7 +28,7 @@ import (
 var (
 	appName        = "MitM Cleanup Job"
 	appDescription = "Maintains database health by pruning old records."
-	version        = "0.8.3"
+	version        = "0.9.0"
 )
 
 // TargetDBConfig defines parameters for the MitM target database
