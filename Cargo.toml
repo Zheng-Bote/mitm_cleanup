@@ -1,0 +1,12 @@
+[package]
+name = "mitm-cleanup"
+version = "0.9.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "MitM database cleanup scheduled batch job"
+homepage = "https://github.com/Zheng-Bote/mitm_cleanup"
+repository = "https://github.com/Zheng-Bote/mitm_cleanup/release/latest"
+documentation = "https://github.com/Zheng-Bote/mitm_cleanup/docs"
+keywords = ["mitm-3", "maintenance-layer"]
+
+[dependencies]
