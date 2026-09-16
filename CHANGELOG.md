@@ -5,6 +5,12 @@ All notable changes to the `mitm_cleanup` component will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.10.0] - 2026-09-16
+
+### Changed
+- **Architecture:** Completely rewritten in Rust. `go build` replaced with `cargo build`.
+- **Performance:** Replaced standard DB drivers with `sqlx` (async Postgres).
+
 ## [v0.9.0] - 2026-09-09
 
 ### Changed
