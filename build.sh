@@ -1,7 +1,6 @@
 #!/usr/bin/sh
 
-MITM_VERSION=$(git describe --tags)
 
-CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${MITM_VERSION}" -o ./bin/mitm-cleanup main.go
+cargo build --release --target x86_64-unknown-linux-musl
+cp target/x86_64-unknown-linux-musl/release/mitm-cleanup /home/zb_bamboo/DEV/__NEW__/Go/mitm-2/scheduler/mitm_scheduler/bin/.
 
-cp bin/mitm-cleanup ../../scheduler/mitm_scheduler/bin/.

@@ -1,0 +1,16 @@
+[package]
+name = "mitm-cleanup"
+version = "1.0.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "MitM database cleanup scheduled batch job"
+homepage = "https://github.com/Zheng-Bote/mitm_cleanup"
+repository = "https://github.com/Zheng-Bote/mitm_cleanup/release/latest"
+documentation = "https://github.com/Zheng-Bote/mitm_cleanup/docs"
+keywords = ["mitm-2", "maintenance-layer"]
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres"] }
